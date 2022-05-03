@@ -23,7 +23,11 @@ for filename in files:
     if os.path.isdir(dataPath + filename):
         subjectNames.append(filename)
 
+sumImagesPET = []
 for subjectName in subjectNames:
+    t1Image = read     t1
+    write
+    t1
     for petData in petDataTypeToProcess:
         # TODO: agregar
         dates = os.listdir(dataPath + subjectName + "\\" + petData + "\\")
@@ -57,12 +61,18 @@ for subjectName in subjectNames:
                 sumImage = petImages[0]
                 for image in petImages[1:]:
                     sumImage = sitk.Add(sumImage, image)
-
+                sumImagesPET.append(sumImage)
 
                 # Write images:
                 sitk.WriteImage(sumImage, petOutputDataPath + subjectName + "_sum_reg.nii")
 
                 # Register to T1:
+                sumImageT1 = reg.RigidImageRegistration(sumImage, t1Image, printLog=True)
+                # Write images:
+                sitk.WriteImage(sumImageT1, petOutputDataPath + subjectName + "_sum_reg_t1.nii")
+
+
+
 
 
 
