@@ -25,14 +25,35 @@ for filename in files:
 
 sumImagesPET = []
 for subjectName in subjectNames:
-    t1Image = read     t1
-    write
-    t1
+    for mriData in mriDataToProcess:
+        dates = os.listdir(dataPath + subjectName + "\\" + mriData + "\\")
+        for date in dates:
+            direct = os.listdir(dataPath + subjectName + "\\" + mriData + "\\" + date)
+            for dir in direct:
+                mriDataPath = dataPath + subjectName + "\\" + mriData + "\\" + date + "\\" + dir
+                mriOutputDataPath = outputPath + subjectName + "\\" + mriData + "\\" + date + "\\" + dir + "\\"
+                if not os.path.exists(mriOutputDataPath):
+                    os.makedirs(mriOutputDataPath)
+                mriFilenames = os.listdir(mriDataPath)
+
+                # t1Image read  t1
+                t1Image = []
+                t1FilenamesNoExt = []
+                for filename in mriFilenames:
+                    [filenamesNoExt, ext] = os.path.splitext(filename)
+                    t1FilenamesNoExt.append(filenamesNoExt)
+                    t1Image.append(sitk.ReadImage(os.path.join(mriDataPath, filename)))
+
+                #write t1 output path
+                refImage = t1Image[0]
+                sitk.WriteImage(t1Image[0], mriOutputDataPath + "{0}_reg.nii".format(t1FilenamesNoExt[0]))
+                for i in range(1, len(t1Image)):
+                    resultReg = reg.RigidImageRegistration(t1Image[i], refImage, printLog=True)
+                    t1Image[i] = resultReg['image']
+                    sitk.WriteImage(t1Image[i], mriOutputDataPath + "{0}_reg.nii".format( t1FilenamesNoExt[i]))
+
     for petData in petDataTypeToProcess:
-        # TODO: agregar
         dates = os.listdir(dataPath + subjectName + "\\" + petData + "\\")
-        petDate = []
-        subdir = []
         for date in dates:
             direct = os.listdir(dataPath + subjectName + "\\" + petData + "\\" + date)
             for dir in direct:
@@ -53,7 +74,7 @@ for subjectName in subjectNames:
                 refImage = petImages[0]
                 sitk.WriteImage(petImages[0], petOutputDataPath + "{0}_reg.nii".format(petFilenamesNoExt[0]))
                 for i in range(1, len(petImages)):
-                    resultReg = reg.RigidImageRegistration( petImages[i], refImage, printLog = True)
+                    resultReg = reg.RigidImageRegistration(petImages[i], refImage, printLog = True)
                     petImages[i] = resultReg['image']
                     sitk.WriteImage(petImages[i], petOutputDataPath + "{0}_reg.nii".format(petFilenamesNoExt[i]))
 
@@ -69,7 +90,7 @@ for subjectName in subjectNames:
                 # Register to T1:
                 sumImageT1 = reg.RigidImageRegistration(sumImage, t1Image, printLog=True)
                 # Write images:
-                sitk.WriteImage(sumImageT1, petOutputDataPath + subjectName + "_sum_reg_t1.nii")
+                sitk.WriteImage(sumImageT1, mriOutputDataPath + subjectName + "_sum_reg_t1.nii")
 
 
 
