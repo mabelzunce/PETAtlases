@@ -6,15 +6,30 @@ import os
 import ImageRegistration as reg
 import time
 import matplotlib.pyplot as plt
+import ants
 
 from SimpleITK import _SimpleITK, SimpleITK
 
-dataPath = "C:\\Users\\Ana Canosa\\Desktop\\Ana\\ADNI\\"
+# Add fsl to the PATH envirnoment variable:
+fslPath = "/usr/local/fsl/bin"
+#os.environ["PATH"] += os.pathsep + fslPath
 
-mriDataToProcess = ["Accelerated_Sagittal_MPRAGE"]
-petDataTypeToProcess = ["ADNI3_av-1451__AC_", "ADNI3_FDG__AC_", "ADNI3_florbetapir__AC_"]
+basePath = "/media/martin/DATADRIVE1/ADNIdata/"
+dataPath = basePath + "/ADNI/"
+sliceToShow = 160
 
-outputPath ='C:\\Users\\Ana Canosa\\Desktop\\Ana\\ADNI_proc\\'
+mriDataToProcess = ["Accelerated_Sagittal_MPRAGE", 'ADNI3_Accelerated_MPRAGE', 'Sag_Accel_IR-FSPGR','Accelerated_Sagittal_MPRAGE_MPR_Cor',
+                    'Sagittal_3D_Accelerated_MPRAGE_REPEAT', 'REPEAT_Accelerated_Sagittal_MPRAGE', 'Accelerated_Sagittal_MPRAGE_L__R',
+                    'ORIG_Accelerated_Sag_IR-FSPGR', 'Accelerated_Sagittal_IR-FSPGR', 'Accelerated_Sag_IR-FSPGR',
+                    'Accelerated_Sagittal_MPRAGE_REPEAT', 'VWIP_Coronal_3D_Accelerated_MPRAGE', 'Accelerated_Sagittal_MPRAGE_MPR_Tra',
+                    '3D_MPRAGE', 'Accelerated_Sagittal_MPRAGE_ND', 't1_fl2d_sag', 'AXIAL_RFORMAT_1',
+                    'Accelerated_Sagittal_MPRAGE_Phase_A-P', 'Accelerated_Sagittal_MPRAGE_repeat', '3D_T1_SAG',
+                    'Repeat_Accelerated_Sagittal_MPRAGE', 'Sagittal_3D_Accelerated_MPRAGE', 'Sagittal_3D_Accelerated_0_angle_MPRAGE', 'Accelerated_Sagittal_MPRAGE']
+petDataTypeToProcess = ["ADNI3_av-1451__AC_", "ADNI3_FDG__AC_", "ADNI3_florbetapir__AC_", 'BRAIN_ADNI', 'ADNI3-TAU-2__AC_',
+                        'ADNI_Brain_PET__Raw', 'ADNI3-AV45__AC_', 'ADNI3_AV-1451_6X5', 'ADNI_Brain_AC_3D',
+                        'ADNI_Brain_PET__Raw_Tau', 'ADNI3_av-1451__AC_', 'ADNI3_florbetapir__AC_', 'ADNI2_FDG__AC_']
+
+outputPath = basePath + "/ADNIproc/"
 if not os.path.exists(outputPath):
     os.mkdir(outputPath)
 else:
@@ -26,112 +41,118 @@ subjectNames = []
 for filename in files:
     if os.path.isdir(dataPath + filename):
         subjectNames.append(filename)
+# Get the list of scans available:
+scanTypes = []
+subjectNamesToProcess = []
+for subjectName in subjectNames:
+    # Look for what images are available:
+    scanTypesThisSubject = os.listdir(dataPath + subjectName + "/")
+    scanTypes.extend(scanTypesThisSubject)
+    # Check if structural MRI and PET images are available:
+    subjectHasMri = False
+    subjectHasPet = False
+    for scan in scanTypesThisSubject:
+        if scan in mriDataToProcess:
+            subjectHasMri = True
+            break
+    for scan in scanTypesThisSubject:
+        if scan in petDataTypeToProcess:
+            subjectHasPet = True
+            break
+    if subjectHasMri and subjectHasPet:
+        subjectNamesToProcess.append(subjectName)
+
+print('Scan types detected:')
+print(set(scanTypes))
+print('Subjects to process:')
+print(subjectNamesToProcess)
 
 sumImagesPET = []
-for subjectName in subjectNames:
+for subjectName in subjectNamesToProcess:
+    t1Images = []
+    t1FilenamesNoExt = []
     for mriData in mriDataToProcess:
-        dates = os.listdir(dataPath + subjectName + "\\" + mriData + "\\")
-        for date in dates:
-            direct = os.listdir(dataPath + subjectName + "\\" + mriData + "\\" + date)
-            for dir in direct:
-                mriDataPath = dataPath + subjectName + "\\" + mriData + "\\" + date + "\\" + dir
-                mriOutputDataPath = outputPath + subjectName + "\\" + mriData + "\\" + date + "\\" + dir + "\\"
-                if not os.path.exists(mriOutputDataPath):
-                    os.makedirs(mriOutputDataPath)
-                mriFilenames = os.listdir(mriDataPath)
+        if os.path.exists(dataPath + subjectName + "/" + mriData + "/"):
+            pathThisMriSequence = dataPath + subjectName + "/" + mriData + "/"
+            dates = os.listdir(pathThisMriSequence)
+            for date in dates:
+                direct = os.listdir(pathThisMriSequence + date)
+                for dir in direct:
+                    mriDataPath = pathThisMriSequence + date + "/" + dir
+                    mriOutputDataPath = outputPath + subjectName + "/" + mriData + "/" + date + "/" + dir + "/"
+                    if not os.path.exists(mriOutputDataPath):
+                        os.makedirs(mriOutputDataPath)
+                    # It should be only one:
+                    mriFilenames = os.listdir(mriDataPath)
+                    for filename in mriFilenames:
+                        [filenamesNoExt, ext] = os.path.splitext(filename)
+                        t1FilenamesNoExt.append(mriOutputDataPath + filenamesNoExt)
+                        t1Images.append(sitk.ReadImage(os.path.join(mriDataPath, filename)))
 
-                # t1Image read  t1
-                t1Image = []
-                t1FilenamesNoExt = []
-                for filename in mriFilenames:
-                    [filenamesNoExt, ext] = os.path.splitext(filename)
-                    t1FilenamesNoExt.append(filenamesNoExt)
-                    t1Image.append(sitk.ReadImage(os.path.join(mriDataPath, filename)))
+            # Process the MRIs for all the dates, using the older as a reference:
+            refImage = t1Images[0]
+            refImage = sitk.Cast(refImage, sitk.sitkFloat32)
+            sitk.WriteImage(t1Images[0], "{0}_reg_to_first_session.nii.gz".format(t1FilenamesNoExt[0]), True)
+            for i in range(1, len(t1Images)):
+                t1Images[i] = sitk.Cast(t1Images[i], sitk.sitkFloat32)
+                resultReg = reg.RigidImageRegistration(t1Images[i], refImage, printLog=True)
+                t1Images[i] = resultReg['image']
+                sitk.WriteImage(t1Images[i], "{0}_reg_to_first_session.nii.gz".format(t1FilenamesNoExt[i]), True)
+                # Extract brain:
+                #os.system("bet {0} {1} -R -f 0.5 -g 0".format("{0}_reg_to_first_session".format(t1FilenamesNoExt[i]),
+                #                                              "{0}_reg_to_first_session_brain".format(t1FilenamesNoExt[i])))
 
-
-                #write t1 output path
-                refImage = t1Image[0]
-                refImage = sitk.Cast(refImage, sitk.sitkFloat32)
-
-                sitk.WriteImage(t1Image[0], mriOutputDataPath + "{0}_reg.nii".format(t1FilenamesNoExt[0]))
-                for i in range(1, len(t1Image)):
-                    t1Image[i] = sitk.Cast(t1Image[i], sitk.sitkFloat32)
-                    resultReg = reg.RigidImageRegistration(t1Image[i], refImage, printLog=True)
-                    t1Image[i] = resultReg['image']
-                    sitk.WriteImage(t1Image[i], mriOutputDataPath + "{0}_reg.nii".format(t1FilenamesNoExt[i]))
-
-    lista = os.listdir(dataPath + subjectName + "\\")
     for petData in petDataTypeToProcess:
-        for i in lista:
-            if i == petData:
-                dates = os.listdir(dataPath + subjectName + "\\" + petData + "\\")
-                for date in dates:
-                    direct = os.listdir(dataPath + subjectName + "\\" + petData + "\\" + date)
-                    for dir in direct:
-                        petDataPath = dataPath + subjectName + "\\" + petData + "\\" + date + "\\" + dir
-                        petOutputDataPath = outputPath + subjectName + "\\" + petData + "\\" + date + "\\" + dir + "\\"
-                        if not os.path.exists(petOutputDataPath):
-                            os.makedirs(petOutputDataPath)
-                        petFilenames = os.listdir(petDataPath)
+        if os.path.exists(dataPath + subjectName + "/" + petData + "/"):
+            pathThisPetTracer = dataPath + subjectName + "/" + petData + "/"
+            dates = os.listdir(pathThisPetTracer)
+            for date in dates:
+                direct = os.listdir(pathThisPetTracer + date)
+                for dir in direct:
+                    petImages = []
+                    petFilenamesNoExt = []
+                    petDataPath = pathThisPetTracer + date + "/" + dir + "/"
+                    petOutputDataPath = outputPath + subjectName + "/" + petData + "/" + date + "/" + dir + "/"
+                    if not os.path.exists(petOutputDataPath):
+                        os.makedirs(petOutputDataPath)
+                    petFilenames = os.listdir(petDataPath)
+                    # Read pet images for this tracer and date and register between them (in case there was motion) and sum them:
+                    petImages = []
+                    petFilenamesNoExt = []
+                    for filename in petFilenames:
+                        [filenamesNoExt, ext] = os.path.splitext(filename)
+                        petFilenamesNoExt.append(filenamesNoExt)
+                        petImages.append(sitk.ReadImage(os.path.join(petDataPath,filename)))
 
-                        # Read pet images
-                        petImages = []
-                        petFilenamesNoExt = []
-                        for filename in petFilenames:
-                            [filenamesNoExt, ext] = os.path.splitext(filename)
-                            petFilenamesNoExt.append(filenamesNoExt)
-                            petImages.append(sitk.ReadImage(os.path.join(petDataPath,filename)))
+                    # Registration between frames, they are not saved. Only saved after registered to the T1 reference image:
+                    refPetImage = petImages[0]
+                    for i in range(1, len(petImages)):
+                        resultReg = reg.RigidImageRegistration(petImages[i], refPetImage, printLog = True)
+                        petImages[i] = resultReg['image']
 
-                        refImage = petImages[0]
-                        sitk.WriteImage(petImages[0], petOutputDataPath + "{0}_reg.nii".format(petFilenamesNoExt[0]))
-                        for i in range(1, len(petImages)):
-                            resultReg = reg.RigidImageRegistration(petImages[i], refImage, printLog = True)
-                            petImages[i] = resultReg['image']
-                            sitk.WriteImage(petImages[i], petOutputDataPath + "{0}_reg.nii".format(petFilenamesNoExt[i]))
+                    # Now compute the sum and register all of them to the t1 used as a reference:
+                    sumImage = petImages[0]
+                    for image in petImages[1:]:
+                        sumImage = sitk.Add(sumImage, image)
+                    # Register to t1 using the sum and apply the transform to all the frames:
+                    resultReg = reg.RigidImageRegistration(sumImage, sitk.Cast(refImage, sitk.sitkFloat32),
+                                                           printLog=True)
+                    sumImage = resultReg['image']
+                    txPet2Mri = resultReg['tx']
+                    # Write sum image:
+                    sitk.WriteImage(sumImage, petOutputDataPath + subjectName + "_sum_reg_t1.nii.gz")
+                    # Apply transform to each frame and save the image:
+                    for i in range(0, len(petImages)):
+                        petImages[i] = reg.ApplyRegTransform(petImages[i], txPet2Mri, refImage=refImage, interpolator=sitk.sitkLinear)
+                        sitk.WriteImage(petImages[i], petOutputDataPath + petFilenamesNoExt[i] + "_reg_t1.nii.gz")
 
-                            imageArrayPetimages = sitk.GetArrayFromImage(petImages[i])
-                            imageArrayPetref = sitk.GetArrayFromImage(petImages[0])
+                    imageArraySum= sitk.GetArrayFromImage(sumImage)
+                    imageArrayT1 = sitk.GetArrayFromImage(refImage)
+                    sliceSum = imageArraySum[sliceToShow, :, :]
+                    sliceT1 = imageArrayT1[sliceToShow, :, :]
 
-                            print(imageArrayPetimages.shape, imageArrayPetref.shape)
+                    plt.imshow(sliceT1, cmap='gray', alpha=1)
+                    plt.imshow(sliceSum, cmap='hot', alpha=0.4)
+                    plt.savefig(petOutputDataPath + subjectName + "_pet_t1")
 
-                            # Que slice muestro
-                            slice = round(imageArrayPetimages.shape[0]/2)
-                            ArraypetImages = imageArrayPetimages[slice, :, :]
-                            ArraypetRef = imageArrayPetref[slice, :, :]
-
-                            plt.imshow(ArraypetRef, cmap='gray', alpha=1)
-                            plt.imshow(ArraypetImages, cmap='Blues_r', alpha=0.4)
-                            plt.savefig(petOutputDataPath + subjectName + "PETimage" + str(i))
-                            #plt.show()
-
-
-
-                        #Add images:
-                        sumImage = petImages[0]
-                        for image in petImages[1:]:
-                            sumImage = sitk.Add(sumImage, image)
-                        sumImagesPET.append(sumImage)
-
-                        # Write images:
-                        sitk.WriteImage(sumImage, petOutputDataPath + subjectName + "_sum_reg.nii")
-
-                # Register to T1:
-                resultReg = reg.RigidImageRegistration(sumImage, sitk.Cast(t1Image[0], sitk.sitkFloat32), printLog=True)
-                sumImageT1 = resultReg['image']
-                # Write images:
-                sitk.WriteImage(sumImageT1, mriOutputDataPath + subjectName + "_sum_reg_t1.nii")
-
-                imageArraysumT1 = sitk.GetArrayFromImage(sumImageT1)
-                imageArrayT1 = sitk.GetArrayFromImage(t1Image[0])
-
-                print(imageArraysumT1.shape, imageArrayT1.shape)
-
-                #Que slice muestro
-                ArraysumImageT1 = imageArraysumT1[160, :, :]
-                ArrayT1 = imageArrayT1[160, :, :]
-
-                plt.imshow(ArrayT1, cmap='gray', alpha=1)
-                plt.imshow(ArraysumImageT1, cmap='hot', alpha=0.4)
-                plt.savefig(mriOutputDataPath + subjectName + "T1")
-                #plt.show()
 
