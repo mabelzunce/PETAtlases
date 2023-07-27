@@ -20,9 +20,12 @@ petImage = sitk.Cast(sitk.ReadImage(petImageFilename), sitk.sitkFloat32)
 mriImage = sitk.Cast(sitk.ReadImage(mriImageFilename), sitk.sitkFloat32)
 mriMni152Image = sitk.Cast(sitk.ReadImage(mni152Filename), sitk.sitkFloat32)
 
+#mriMni152Image = sitk.Flip(mriMni152Image, [False,True,False])
+
 sitk.WriteImage(petImage, outputPath + "PET.nii")
 sitk.WriteImage(mriImage, outputPath + "MRI.nii")
 sitk.WriteImage(mriMni152Image, outputPath + "MNI152.nii")
+
 # Registration
 resultsRegistration = reg.RigidImageRegistration(petImage, sitk.Cast(mriImage, sitk.sitkFloat32), printLog = True)
 sitk.WriteImage(resultsRegistration["image"], outputPath + "regPET.nii")
@@ -35,10 +38,12 @@ maskMNI152 = otsuSegmentation > 0
 sitk.WriteImage(maskMNI152, outputPath + "maskMNI152.nii")
 
 # Two steps, first affine transform, then nonlinear:
-resultsFirstStepNormalization = reg.AffineImageRegistration(mriImage, mriMni152Image, printLog = True, fixedMask = maskMNI152)
-sitk.WriteImage(resultsFirstStepNormalization["image"], outputPath + "normalizedAffineMRI.nii")
+resultsRigidNormalization = reg.RigidImageRegistration(mriImage, mriMni152Image, printLog = True)
+sitk.WriteImage(resultsRigidNormalization["image"], outputPath + "normalizedRigidMRI.nii")
+resultsAffineNormalization = reg.AffineImageRegistration(resultsRigidNormalization["image"], mriMni152Image, printLog = True)
+sitk.WriteImage(resultsAffineNormalization["image"], outputPath + "normalizedAffineMRI.nii")
 
 # Now the nonlinear registration:
-resultsNonlinearRegistration = reg.NonlinearImageRegistration(resultsFirstStepNormalization["image"], mriMni152Image, printLog = True)
+resultsNonlinearRegistration = reg.NonlinearImageRegistration(resultsAffineNormalization["image"], mriMni152Image, printLog = True)
 
 sitk.WriteImage(resultsNonlinearRegistration["image"], outputPath + "normalizedMRI.nii")

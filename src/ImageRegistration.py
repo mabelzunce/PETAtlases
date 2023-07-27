@@ -14,11 +14,11 @@ def RigidImageRegistration(movingImage, fixedImage, printLog = False, fixedMask 
     regMethod.SetMetricAsMattesMutualInformation(numberOfHistogramBins=50) # Mutual information for multi modality image registration:
     # Optimization:
     regMethod.SetOptimizerAsGradientDescentLineSearch(learningRate=1.0,
-                                              numberOfIterations=200,
-                                              estimateLearningRate=regMethod.Once)
+                                            numberOfIterations=200,
+                                            convergenceMinimumValue=1e-6)
     regMethod.SetMetricSamplingStrategy(regMethod.RANDOM)
     regMethod.SetOptimizerScalesFromPhysicalShift()
-    regMethod.SetMetricSamplingPercentage(0.05)
+    regMethod.SetMetricSamplingPercentage(0.2)
     regMethod.SetShrinkFactorsPerLevel([4, 2, 1])
     regMethod.SetSmoothingSigmasPerLevel([2,1,0])
 
@@ -64,21 +64,21 @@ def AffineImageRegistration(movingImage, fixedImage, printLog = False, fixedMask
 
     regMethod = sitk.ImageRegistrationMethod()
 
-    regMethod.SetMetricAsCorrelation()
+    regMethod.SetMetricAsMattesMutualInformation(50)
     # Optimization:
     regMethod.SetOptimizerAsGradientDescentLineSearch(learningRate=1.0,
                                               numberOfIterations=200,
-                                              estimateLearningRate=regMethod.Once)
+                                            convergenceMinimumValue=1e-6)
     regMethod.SetMetricSamplingStrategy(regMethod.RANDOM)
     regMethod.SetOptimizerScalesFromPhysicalShift()
-    regMethod.SetMetricSamplingPercentage(0.05)
+    regMethod.SetMetricSamplingPercentage(0.2)
     regMethod.SetShrinkFactorsPerLevel([4, 2, 1])
     regMethod.SetSmoothingSigmasPerLevel([2,1,0])
 
     # Initialization for Rigid registration:
     tx = sitk.CenteredTransformInitializer(fixedImage, movingImage,
                                            sitk.AffineTransform(3),
-                                           sitk.CenteredTransformInitializerFilter.MOMENTS)
+                                           sitk.CenteredTransformInitializerFilter.GEOMETRY)
 
     regMethod.SetInitialTransform(tx)
 
@@ -121,10 +121,10 @@ def NonlinearImageRegistration(movingImage, fixedImage, printLog = False):
     # Optimization:
     regMethod.SetOptimizerAsGradientDescentLineSearch(learningRate=1.0,
                                               numberOfIterations=200,
-                                              estimateLearningRate=regMethod.Once)
+                                            convergenceMinimumValue=1e-6)
     regMethod.SetMetricSamplingStrategy(regMethod.RANDOM)
     regMethod.SetOptimizerScalesFromPhysicalShift()
-    regMethod.SetMetricSamplingPercentage(0.05)
+    regMethod.SetMetricSamplingPercentage(0.1)
     regMethod.SetShrinkFactorsPerLevel([4, 2, 1])
     regMethod.SetSmoothingSigmasPerLevel([2,1,0])
 
@@ -159,3 +159,17 @@ def NonlinearImageRegistration(movingImage, fixedImage, printLog = False):
     regResults = {'image': regImage, 'tx': outTx}
 
     return regResults
+
+def ApplyRegTransform(inputImage, tx, refImage = [], interpolator = sitk.sitkLinear):
+    # If not reference, stay on the input image space
+    if not refImage:
+        refImage = inputImage
+    # Apply transform:
+    resampler = sitk.ResampleImageFilter()
+    resampler.SetReferenceImage(refImage)
+    resampler.SetInterpolator(interpolator)
+    resampler.SetDefaultPixelValue(0)
+    resampler.SetTransform(tx)
+
+    txImage = resampler.Execute(inputImage)
+    return txImage
