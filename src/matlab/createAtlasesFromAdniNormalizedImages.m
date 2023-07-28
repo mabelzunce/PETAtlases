@@ -95,10 +95,15 @@ for g = 1 : numel(atlasGroups)
                 subjectName{g}{indexAtlas} = processedSubjects{i};
                 group{g}{indexAtlas} = groupThisSubject;
                 if ~isempty(indexMatchedName)
-                    age_years(indexAtlas, g) = adniCollectionData.Age(indexMatchedName);
-                    sex(indexAtlas, g) = adniCollectionData.Sex{indexMatchedName};
+                    age_years{g}(indexAtlas) = adniCollectionData.Age(indexMatchedName);
+                    sex{g}(indexAtlas) = adniCollectionData.Sex{indexMatchedName};
                     visit{g}{indexAtlas} = adniCollectionData.Visit{indexMatchedName};
-                    date(indexAtlas, g) = adniCollectionData.AcqDate(indexMatchedName);   
+                    date{g}(indexAtlas) = adniCollectionData.AcqDate(indexMatchedName);   
+                else
+                    age_years{g}(indexAtlas) = adniMergeData.AGE(indexMatchedNameMerge);
+                    sex{g}(indexAtlas) = adniMergeData.PTGENDER{indexMatchedNameMerge}(1);
+                    visit{g}{indexAtlas} = adniMergeData.VISCODE{indexMatchedNameMerge};
+                    date{g}(indexAtlas) = adniMergeData.EXAMDATE(indexMatchedNameMerge);
                 end
             end
             
